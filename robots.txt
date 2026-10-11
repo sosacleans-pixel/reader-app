@@ -1,0 +1,4 @@
+# Reader companion for the book. Not a public marketing site.
+# Remove this file if you later want the site indexed.
+User-agent: *
+Disallow: /
