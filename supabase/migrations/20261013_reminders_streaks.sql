@@ -7,6 +7,8 @@ create table if not exists public.workout_prefs (
   push_enabled boolean not null default false,
   email_enabled boolean not null default false,
   last_sent_date date,
+  comeback_anchor date,          -- last_workout_date the comeback count belongs to
+  comeback_sends int not null default 0,
   updated_at timestamptz not null default now()
 );
 create table if not exists public.push_subscriptions (
@@ -35,3 +37,5 @@ create policy "own streak" on public.streaks for all using (auth.uid() = user_id
 
 -- Safe if the table already existed without it:
 alter table public.streaks add column if not exists total_workouts int not null default 0;
+alter table public.workout_prefs add column if not exists comeback_anchor date;
+alter table public.workout_prefs add column if not exists comeback_sends int not null default 0;

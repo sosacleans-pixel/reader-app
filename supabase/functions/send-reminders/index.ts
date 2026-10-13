@@ -23,7 +23,7 @@ const wrap = (h: string, p: string, btn: string) => `<div style="font-family:Ari
 <p style="color:#999;font-size:12px">Coach Salim · coachsalimheyaime.com<br>Turn off email reminders anytime in the app under the ⏰ button.</p></div>`;
 type Txt = string | ((streak: number) => string);
 type Copy = { pushTitle: Txt; pushBody: Txt; emailSubject: Txt; emailHtml: Txt };
-export const REMINDER_COPY: { day1: Copy; comeback: Copy; day2: Copy; day3: Copy; generic: Copy } = {
+export const REMINDER_COPY: { day1: Copy; comeback: Copy[]; day2: Copy; day3: Copy; generic: Copy } = {
   // streak 0 and no completed workouts ever: day 1
   day1: {
     pushTitle: "Day 1 starts now 💪",
@@ -31,13 +31,34 @@ export const REMINDER_COPY: { day1: Copy; comeback: Copy; day2: Copy; day3: Copy
     emailSubject: "Your first 7 minutes are waiting",
     emailHtml: wrap("Day 1 starts now", "Just 7 minutes. No gym, no gear, no excuses. Press play and let's move.<br><br>— Coach Salim", "Start Day 1"),
   },
-  // streak 0 but has worked out before (missed yesterday): no-guilt comeback
-  comeback: {
-    pushTitle: "Welcome back 👋",
-    pushBody: "Missed a day? No problem. 7 minutes today and your streak starts again — Coach Salim",
-    emailSubject: "Let's pick it back up today",
-    emailHtml: wrap("Welcome back 👋", "Missed a day? That's life, and it doesn't erase the work you've already put in. No guilt, no catching up. Just 7 minutes today and your streak starts again.<br><br>— Coach Salim", "Pick it back up"),
-  },
+  // Worked out before, streak 0. Sent only on comeback days (see COMEBACK_DAYS).
+  // Every-other-day phase rotates by comeback send count (mod 4); weekly phase always uses the 4th.
+  comeback: [
+    {
+      pushTitle: "Welcome back 👋",
+      pushBody: "Missed a day? No problem. 7 minutes today and your streak starts again — Coach Salim",
+      emailSubject: "Let's pick it back up today",
+      emailHtml: wrap("Welcome back 👋", "Missed a day? That's life, and it doesn't erase the work you've already put in. No guilt, no catching up. Just 7 minutes today and your streak starts again.<br><br>— Coach Salim", "Pick it back up"),
+    },
+    {
+      pushTitle: "Your 7 minutes are still here ⏱️",
+      pushBody: "No pressure, no catching up. Just today's workout. I'll be right there with you.",
+      emailSubject: "Just 7 minutes today",
+      emailHtml: wrap("Your 7 minutes are still here ⏱️", "No pressure and nothing to make up. Just today's workout, one move at a time. Press play and I'll be right there with you.<br><br>— Coach Salim", "Start today's 7 minutes"),
+    },
+    {
+      pushTitle: "Small wins count 💪",
+      pushBody: "Something is always better than nothing. Press play, even if it's just a few minutes.",
+      emailSubject: "Something is always better than nothing",
+      emailHtml: wrap("Small wins count 💪", "You don't have to be perfect to make progress. Something is always better than nothing, so press play, even if it's just a few minutes. Every small win adds up.<br><br>— Coach Salim", "Press play"),
+    },
+    {
+      pushTitle: "Ready when you are 💛",
+      pushBody: "Whenever you're ready, your next workout is one tap away. — Coach Salim",
+      emailSubject: "Ready when you are",
+      emailHtml: wrap("Ready when you are 💛", "Life gets busy, and that's okay. Whenever you're ready, your next workout is one tap away. I'll be here, no judgment, just 7 minutes and a fresh start.<br><br>— Coach Salim", "I'm ready"),
+    },
+  ],
   // streak 1: worked out yesterday
   day2: {
     pushTitle: "Day 2 — keep it going 🔥",
@@ -60,10 +81,15 @@ export const REMINDER_COPY: { day1: Copy; comeback: Copy; day2: Copy; day3: Copy
     emailHtml: (s) => wrap("Time to move", `Your 7-minute workout is ready. You're on a <b style="color:#FFC700">${s}-day streak</b>. Keep it alive.<br><br>— Coach Salim`, "Start today's workout"),
   },
 };
-function copyFor(streak: number, hasHistory: boolean) {
-  const c = streak <= 0 ? (hasHistory ? REMINDER_COPY.comeback : REMINDER_COPY.day1) : streak === 1 ? REMINDER_COPY.day2 : streak === 2 ? REMINDER_COPY.day3 : REMINDER_COPY.generic;
-  const v = (t: Txt) => (typeof t === "function" ? t(streak) : t);
-  return { pushTitle: v(c.pushTitle), pushBody: v(c.pushBody), emailSubject: v(c.emailSubject), emailHtml: v(c.emailHtml) };
+// Days since last workout (d) on which a comeback reminder goes out; after 42, stop until they work out again.
+export const COMEBACK_BIWEEKLY_DAYS = [2, 4, 6, 8, 10, 12, 14];
+export const COMEBACK_WEEKLY_DAYS = [21, 28, 35, 42];
+const v = (t: Txt, streak: number) => (typeof t === "function" ? t(streak) : t);
+function render(c: Copy, streak: number) {
+  return { pushTitle: v(c.pushTitle, streak), pushBody: v(c.pushBody, streak), emailSubject: v(c.emailSubject, streak), emailHtml: v(c.emailHtml, streak) };
+}
+function dayDiff(from: string, to: string) {
+  return Math.round((Date.parse(to + "T00:00:00Z") - Date.parse(from + "T00:00:00Z")) / 86400000);
 }
 
 Deno.serve(async (req) => {
@@ -80,19 +106,33 @@ Deno.serve(async (req) => {
     if (p.last_sent_date === lp.date) continue;
     // Skip if they already worked out today.
     const { count } = await db.from("day_logs").select("*", { count: "exact", head: true }).eq("user_id", p.user_id).eq("calendar_date", lp.date);
-    await db.from("workout_prefs").update({ last_sent_date: lp.date }).eq("user_id", p.user_id);
     if (count && count > 0) continue;
-    const { data: st } = await db.from("streaks").select("current_streak,last_workout_date,total_workouts").eq("user_id", p.user_id).maybeSingle();
-    // Stored streak is only fresh if the last workout was yesterday (local); otherwise they're starting over.
-    const y = new Date(lp.date + "T12:00:00Z"); y.setUTCDate(y.getUTCDate() - 1);
-    const streak = st && st.last_workout_date === y.toISOString().slice(0, 10) ? st.current_streak ?? 0 : 0;
-    // Any past workout? Prefer streaks.total_workouts/last_workout_date, fall back to the app's day_logs table.
-    let hasHistory = !!(st && ((st.total_workouts ?? 0) > 0 || st.last_workout_date));
-    if (!hasHistory) {
-      const { count: past } = await db.from("day_logs").select("*", { count: "exact", head: true }).eq("user_id", p.user_id);
-      hasHistory = (past ?? 0) > 0;
+    // Once-per-day guard, atomic: only the invocation that flips last_sent_date to today proceeds.
+    const { data: claimed } = await db.from("workout_prefs").update({ last_sent_date: lp.date }).eq("user_id", p.user_id)
+      .or(`last_sent_date.is.null,last_sent_date.neq.${lp.date}`).select("user_id");
+    if (!claimed || claimed.length === 0) continue;
+    const { data: st } = await db.from("streaks").select("current_streak,last_workout_date").eq("user_id", p.user_id).maybeSingle();
+    // Last workout date: newest of the app's day_logs and the synced streak row (either may lag).
+    const { data: lastLog } = await db.from("day_logs").select("calendar_date").eq("user_id", p.user_id).lt("calendar_date", lp.date).order("calendar_date", { ascending: false }).limit(1).maybeSingle();
+    const last = [lastLog?.calendar_date, st?.last_workout_date].filter((x): x is string => !!x && x < lp.date).sort().pop() ?? null;
+    let copy: ReturnType<typeof render>;
+    if (!last) {
+      copy = render(REMINDER_COPY.day1, 0); // never worked out: Day 1, daily
+    } else {
+      const d = dayDiff(last, lp.date);
+      if (d === 1) {
+        // Worked out yesterday: stored streak is fresh (at least 1).
+        const streak = Math.max(1, st?.last_workout_date === last ? st?.current_streak ?? 1 : 1);
+        copy = render(streak === 1 ? REMINDER_COPY.day2 : streak === 2 ? REMINDER_COPY.day3 : REMINDER_COPY.generic, streak);
+      } else {
+        // Streak is 0 with history: comeback schedule only.
+        const weekly = COMEBACK_WEEKLY_DAYS.includes(d);
+        if (!weekly && !COMEBACK_BIWEEKLY_DAYS.includes(d)) continue; // no reminder today (or schedule finished after d=42)
+        const sends = p.comeback_anchor === last ? p.comeback_sends ?? 0 : 0; // reset count after each new workout
+        copy = render(REMINDER_COPY.comeback[weekly ? 3 : sends % 4], 0);
+        await db.from("workout_prefs").update({ comeback_anchor: last, comeback_sends: sends + 1 }).eq("user_id", p.user_id);
+      }
     }
-    const copy = copyFor(streak, hasHistory);
     let delivered = false;
     if (p.push_enabled) {
       const { data: subs } = await db.from("push_subscriptions").select("*").eq("user_id", p.user_id);
