@@ -22,6 +22,7 @@ create table if not exists public.streaks (
   current_streak int not null default 0,
   best_streak int not null default 0,
   last_workout_date date,
+  total_workouts int not null default 0,
   timezone text,
   updated_at timestamptz not null default now()
 );
@@ -31,3 +32,6 @@ alter table public.streaks enable row level security;
 create policy "own prefs" on public.workout_prefs for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "own subs" on public.push_subscriptions for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "own streak" on public.streaks for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- Safe if the table already existed without it:
+alter table public.streaks add column if not exists total_workouts int not null default 0;

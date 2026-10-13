@@ -89,8 +89,8 @@ function workoutDates(){var set={};try{Object.keys(localStorage).forEach(functio
 function streak(){var d=workoutDates(),now=new Date(),c=0,t=new Date(now.getFullYear(),now.getMonth(),now.getDate());
  if(!d[ymd(t)])t.setDate(t.getDate()-1); /* today not done yet: streak alive through yesterday */
  while(d[ymd(t)]){c++;t.setDate(t.getDate()-1)}
- var prev=ls(KS)||{best:0};var s={current:c,best:Math.max(prev.best||0,c),lastDate:Object.keys(d).sort().pop()||null,updatedAt:new Date().toISOString()};
- if(s.current!==prev.current||s.best!==prev.best){ls(KS,s);sbUpsert("streaks",{current_streak:s.current,best_streak:s.best,last_workout_date:s.lastDate,timezone:tz(),updated_at:s.updatedAt},"user_id")}
+ var prev=ls(KS)||{best:0};var s={current:c,best:Math.max(prev.best||0,c),total:Object.keys(d).length,lastDate:Object.keys(d).sort().pop()||null,updatedAt:new Date().toISOString()};
+ if(s.current!==prev.current||s.best!==prev.best||s.total!==prev.total){ls(KS,s);sbUpsert("streaks",{current_streak:s.current,best_streak:s.best,total_workouts:s.total,last_workout_date:s.lastDate,timezone:tz(),updated_at:s.updatedAt},"user_id")}
  return s}
 function celebrate(n){
  var o=el('<div class="rf-cel" role="dialog" aria-live="polite"><div class="rf-flame">🔥</div><div class="rf-num">'+n+'</div><div class="rf-lbl">'+n+'-day streak!</div><p class="rf-sub">'+msg(n)+'</p><button class="rf-btn">Keep it going</button></div>');
