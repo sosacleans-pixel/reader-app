@@ -103,10 +103,7 @@ var orig=Storage.prototype.setItem;Storage.prototype.setItem=function(k,v){var b
 
 /* ---------- boot ---------- */
 function boot(){addCss();
- var demo=(location.hash.match(/rf-demo=(\w+)/)||[])[1];
  var bell=el('<button class="rf-bell" aria-label="Workout reminders">⏰</button>');bell.onclick=settings;document.body.appendChild(bell);
- if(demo==="onboarding")return onboarding();if(demo==="settings")return settings();if(demo==="iostip"){settings();return}
- if(demo&&/^streak(\d+)$/.test(demo))return celebrate(+demo.slice(6));
  streak();var p=prefs();if(!p)setTimeout(onboarding,1200);else if(p.slot)iosBanner();
  if(p&&p.push&&window.Notification&&Notification.permission==="granted")enablePush(); /* refresh subscription */
  if(p&&p.slot&&session()&&!p.synced){savePrefs(p);p.synced=1;ls(KP,p)}}
