@@ -3,7 +3,7 @@
 "use strict";
 var SB="https://olncfwohfpgpmygxjpcm.supabase.co",ANON="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9sbmNmd29oZnBncG15Z3hqcGNtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE3MzQ0ODgsImV4cCI6MjEwNzMxMDQ4OH0.rcjQ4E2oPVyth1bboHvwRFqUtwAAAkmUw1TGwF20_Uc",VAPID="BH5O9YZfRa4pKPjnkO-FevCFXgyTcRXP3GYE6SaLP3YLLPGxmQfzdEeeX0rh77RwhcfQ4UGkBTHLy1JMGc2a-Es";
 var KP="actm.reminder.prefs",KS="actm.streak",KC="actm.streak.celebrated",KT="actm.iostip.dismissed";
-var SLOTS={morning:{label:"Morning",time:"07:00"},afternoon:{label:"Afternoon",time:"12:00"},evening:{label:"Evening",time:"18:00"}};
+var SLOTS={morning:{label:"Morning",time:"07:00"},afternoon:{label:"Afternoon",time:"12:30"},evening:{label:"Evening",time:"18:00"}};
 function ls(k,v){try{if(v===undefined){var r=localStorage.getItem(k);return r?JSON.parse(r):null}localStorage.setItem(k,JSON.stringify(v))}catch(e){return null}}
 function tz(){try{return Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC"}catch(e){return"UTC"}}
 function ymd(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
@@ -48,18 +48,17 @@ function tipHtml(){return isIOS()&&!standalone()?'<div class="rf-tip">📲 <b>Ad
 
 function onboarding(){
  var sel="evening";var o=el('<div class="rf-ov" role="dialog" aria-modal="true"><div class="rf-card"><h2 class="rf-h">When do you plan to work out?</h2><p class="rf-p">Pick a time and I’ll nudge you every day. Seven minutes. That’s it.</p>'+
- Object.keys(SLOTS).map(function(k){return'<button class="rf-opt'+(k===sel?" on":"")+'" data-k="'+k+'">'+SLOTS[k].label+'<span>'+fmt(SLOTS[k].time)+'</span></button>'}).join("")+
+ Object.keys(SLOTS).map(function(k){return'<button class="rf-opt'+(k===sel?" on":"")+'" data-k="'+k+'">'+SLOTS[k].label+'</button>'}).join("")+
  '<p class="rf-p" style="font-size:13px;margin:4px 0 12px">Time zone: '+tz()+'</p><button class="rf-btn">Set my reminder</button><button class="rf-btn2">Not now</button></div></div>');
  o.querySelectorAll(".rf-opt").forEach(function(b){b.onclick=function(){sel=b.dataset.k;o.querySelectorAll(".rf-opt").forEach(function(x){x.classList.toggle("on",x===b)})}});
  o.querySelector(".rf-btn").onclick=function(){var p={slot:sel,tz:tz(),push:false,email:false};savePrefs(p);close(o);enablePush().then(function(ok){if(ok){p.push=true;savePrefs(p)}else if(isIOS()&&!standalone())iosBanner()})};
  o.querySelector(".rf-btn2").onclick=function(){ls(KP,{slot:null,skipped:true,tz:tz()});close(o)};
  document.body.appendChild(o)}
-function fmt(t){var h=+t.slice(0,2);return(h%12||12)+":"+t.slice(3)+(h<12?" AM":" PM")}
 
 function settings(){
  var p=prefs()||{};var s=session();var email=s&&s.user&&s.user.email;
  var o=el('<div class="rf-ov" role="dialog" aria-modal="true"><div class="rf-card"><h2 class="rf-h">Workout reminders</h2>'+tipHtml()+
- '<div class="rf-row"><div>Workout time<small>Daily reminder time</small></div><select class="rf-sel" id="rf-slot"><option value="">Off</option>'+Object.keys(SLOTS).map(function(k){return'<option value="'+k+'"'+(p.slot===k?" selected":"")+'>'+SLOTS[k].label+' · '+fmt(SLOTS[k].time)+'</option>'}).join("")+'</select></div>'+
+ '<div class="rf-row"><div>Workout time<small>Daily reminder time</small></div><select class="rf-sel" id="rf-slot"><option value="">Off</option>'+Object.keys(SLOTS).map(function(k){return'<option value="'+k+'"'+(p.slot===k?" selected":"")+'>'+SLOTS[k].label+'</option>'}).join("")+'</select></div>'+
  '<div class="rf-row"><div>Time zone<small>From this device</small></div><span style="color:#FFC700">'+(p.tz||tz())+'</span></div>'+
  '<div class="rf-row"><div>Push notifications<small id="rf-pst">'+pushStatus()+'</small></div><input type="checkbox" class="rf-tog" id="rf-push"'+(p.push?" checked":"")+'></div>'+
  '<div class="rf-row"><div>Email reminder too<small>'+(email?"Sent to "+email:"Sign in to use email reminders")+'</small></div><input type="checkbox" class="rf-tog" id="rf-mail"'+(p.email?" checked":"")+(email?"":" disabled")+'></div>'+
