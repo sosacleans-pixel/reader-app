@@ -55,6 +55,9 @@ function onboarding(){
  o.querySelector(".rf-btn2").onclick=function(){ls(KP,{slot:null,skipped:true,tz:tz()});close(o)};
  document.body.appendChild(o)}
 
+var onboardingTimer=null;
+function scheduleOnboarding(){if(onboardingTimer)return;if(prefs()||!session())return;onboardingTimer=setTimeout(function(){onboardingTimer=null;if(!prefs()&&session())onboarding()},1200)}
+
 function settings(){
  var p=prefs()||{};var s=session();var email=s&&s.user&&s.user.email;
  var o=el('<div class="rf-ov" role="dialog" aria-modal="true"><div class="rf-card"><h2 class="rf-h">Workout reminders</h2>'+tipHtml()+
@@ -98,12 +101,12 @@ function celebrate(n){
 function msg(n){return n>=21?"Three weeks straight. This is who you are now.":n>=7?"A full week and counting. Don’t break the chain.":"You showed up "+n+" days in a row. See you tomorrow."}
 function checkCelebrate(){var s=streak(),today=ymd(new Date());if(s.current>=3&&workoutDates()[today]&&ls(KC)!==today){ls(KC,today);celebrate(s.current)}}
 /* Detect workout completion: the app writes logs to localStorage key actm.logs.<user>. */
-var orig=Storage.prototype.setItem;Storage.prototype.setItem=function(k,v){var before=null;var watch=this===window.localStorage&&typeof k==="string"&&k.indexOf("actm.logs.")===0;if(watch)before=this.getItem(k);orig.apply(this,arguments);if(watch&&before!==v)setTimeout(checkCelebrate,600)};
+var orig=Storage.prototype.setItem;Storage.prototype.setItem=function(k,v){var before=null;var watchLog=this===window.localStorage&&typeof k==="string"&&k.indexOf("actm.logs.")===0;var watchAuth=this===window.localStorage&&typeof k==="string"&&/^sb-.*-auth-token$/.test(k);if(watchLog)before=this.getItem(k);orig.apply(this,arguments);if(watchLog&&before!==v)setTimeout(checkCelebrate,600);if(watchAuth)setTimeout(scheduleOnboarding,0)};
 
 /* ---------- boot ---------- */
 function boot(){addCss();
  var bell=el('<button class="rf-bell" aria-label="Workout reminders">⏰</button>');bell.onclick=settings;document.body.appendChild(bell);
- streak();var p=prefs();if(!p)setTimeout(onboarding,1200);else if(p.slot)iosBanner();
+ streak();var p=prefs();scheduleOnboarding();if(p&&p.slot)iosBanner();
  if(p&&p.push&&window.Notification&&Notification.permission==="granted")enablePush(); /* refresh subscription */
  if(p&&p.slot&&session()&&!p.synced){savePrefs(p);p.synced=1;ls(KP,p)}}
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",boot);else boot();
