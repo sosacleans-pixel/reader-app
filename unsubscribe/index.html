@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Reminder emails · 22-Day 7-Minute Workout</title>
+<style>
+  body{font-family:Lato,system-ui,-apple-system,"Segoe UI",Arial,sans-serif;line-height:1.55;max-width:560px;margin:0 auto;padding:32px 18px 60px;color:#1e1e1e;background:#fff7e8}
+  h1{font-family:Anton,Impact,"Arial Narrow",sans-serif;font-weight:400;letter-spacing:.5px;text-transform:uppercase;font-size:2.2rem;line-height:1.1;margin:.2em 0 .5em}
+  .card{background:#fffdf8;border-radius:20px;padding:20px;border-top:4px solid #FFC700}
+  button{width:100%;min-height:48px;border:0;border-radius:999px;background:#1e1e1e;color:#FFC700;font-weight:700;font-size:1rem;cursor:pointer}
+  .err{color:#bf3404;font-weight:700}
+  a{color:#1e1e1e;font-weight:700}
+  footer{margin-top:2em;font-size:.85em;color:#5e584c}
+  [hidden]{display:none!important}
+</style>
+</head>
+<body>
+<h1>Reminder emails</h1>
+<div class="card">
+  <div id="ask">
+    <p>Stop getting workout reminder emails from the 22-Day app? Push reminders and your workouts aren&rsquo;t affected.</p>
+    <form id="f" method="post" action="https://olncfwohfpgpmygxjpcm.supabase.co/functions/v1/email-unsubscribe">
+      <input type="hidden" name="u" id="u">
+      <input type="hidden" name="t" id="t">
+      <button type="submit">Unsubscribe from reminder emails</button>
+    </form>
+  </div>
+  <p id="done" hidden><strong>You&rsquo;re unsubscribed.</strong> We won&rsquo;t send you reminder emails anymore. You can turn them back on in the app under the &#9200; button.</p>
+  <p id="bad" class="err" hidden>This unsubscribe link isn&rsquo;t valid. Turn reminder emails off in the app under the &#9200; button, or email <a href="mailto:coachsalimheyaime@gmail.com?subject=Unsubscribe%20reminders">coachsalimheyaime@gmail.com</a> and we&rsquo;ll do it for you.</p>
+  <p id="srv" class="err" hidden>Something went wrong on our side. Please try again, or email <a href="mailto:coachsalimheyaime@gmail.com?subject=Unsubscribe%20reminders">coachsalimheyaime@gmail.com</a>.</p>
+</div>
+<footer>Coach Salim Heyaime LLC &middot; <a href="/privacy/">Privacy Policy</a> &middot; <a href="/consumer-health-data/">Consumer Health Data Privacy Policy</a> &middot; <a href="/terms/">Terms of Use</a></footer>
+<script>
+(function(){
+  var q=new URLSearchParams(location.search);
+  function show(id){["ask","done","bad","srv"].forEach(function(x){document.getElementById(x).hidden=x!==id;});}
+  if(q.get("done")){show("done");return;}
+  if(q.get("error")==="server"){show("srv");return;}
+  if(q.get("error")||!q.get("u")||!q.get("t")){show("bad");return;}
+  document.getElementById("u").value=q.get("u");
+  document.getElementById("t").value=q.get("t");
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,34 @@
+name: no-trackers
+# Google Analytics (G-WKF5HQXHB1) is allowed only in the gated public app shell (index.html and its
+# copy 404.html), where it loads only on the signed-out root view. Fails if any other deployed file
+# references Google Analytics / Tag Manager / Google Fonts, if the shell loses its gate, or if an
+# HTML page loads a resource from any origin other than the app and its Supabase project.
+on: [push, pull_request]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: No trackers or Google Fonts outside the gated public shell
+        run: |
+          set -euo pipefail
+          P='gtag|googletagmanager|google-analytics|G-WKF5HQXHB1|fonts\.googleapis|fonts\.gstatic'
+          if grep -rIlE --exclude-dir=.git --exclude-dir=.github "$P" . | grep -vxE '\./(index|404)\.html'; then
+            echo "FAIL: tracker / Google Fonts reference found outside index.html and 404.html (files above)"; exit 1
+          fi
+          for f in index.html 404.html; do
+            if grep -qE 'fonts\.googleapis|fonts\.gstatic|https?://[^"'"'"' ]*google-analytics' "$f"; then echo "FAIL: $f loads Google Fonts or google-analytics directly"; exit 1; fi
+            [ "$(grep -o 'G-WKF5HQXHB1' "$f" | wc -l)" -le 1 ] || { echo "FAIL: $f has the GA ID more than once"; exit 1; }
+            if grep -q 'G-WKF5HQXHB1' "$f"; then
+              grep -q 'if (!allowed()) { off(); return; }' "$f" || { echo "FAIL: $f GA gate missing"; exit 1; }
+              grep -q 'send_page_view: false' "$f" || { echo "FAIL: $f automatic page_view not disabled"; exit 1; }
+              if grep -nE "gtag\([^)]*(user_id|email|energy|mood|reflection|readiness|pain|effort)" "$f"; then echo "FAIL: $f sends personal or health data to GA"; exit 1; fi
+            fi
+          done
+          bad=$(grep -rhoiE --exclude-dir=.git --include='*.html' '<(script|link|img|iframe)[^>]+(src|href)="https?://[^"]+' . \
+            | grep -viE 'https://(app\.coachsalimheyaime\.com|olncfwohfpgpmygxjpcm\.supabase\.co)' \
+            | grep -viE '<link[^>]+rel="canonical"' || true)
+          if [ -n "$bad" ]; then echo "FAIL: HTML loads a third-party resource:"; echo "$bad"; exit 1; fi
+          echo "OK"
+      - name: GA loads only on the public signed-out view
+        run: node .github/scripts/ga-gate-test.js

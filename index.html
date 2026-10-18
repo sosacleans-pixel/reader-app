@@ -51,28 +51,39 @@
         addEventListener('storage', check);
         var t = setInterval(function () { check(); if (window[OFF]) clearInterval(t); }, 500);
 
-        /* magic_link_requested: the sign-in link request (POST /auth/v1/otp) succeeded. Sent once,
-           then GA is switched off. Any other auth or data call also switches GA off. */
-        var f = window.fetch;
+        /* magic_link_requested: the sign-in form was submitted (POST /auth/v1/otp). Sent once, then
+           GA is switched off for the rest of the page. Any other auth or data call also switches it off. */
+        var f = window.fetch, sent = null;
         if (typeof f !== 'function') return;
+        if (navigator.sendBeacon) {
+          var sb = navigator.sendBeacon;
+          navigator.sendBeacon = function (u, d) {
+            try { if (sent && /google-analytics\.com\/g\/collect/.test(u) && /magic_link_requested/.test(u + (typeof d === 'string' ? d : ''))) sent(); } catch (e) {}
+            return sb.apply(navigator, arguments);
+          };
+        }
         window.fetch = function (input, init) {
           var url = '', method = 'GET';
           try {
             url = typeof input === 'string' ? input : (input && input.url) || String(input || '');
             method = ((init && init.method) || (input && input.method) || 'GET').toUpperCase();
             if (/\/auth\/v1\/(token|verify|user|logout|callback)/.test(url) || /\/rest\/v1\//.test(url)) off();
+            if (sent && /google-analytics\.com\/g\/collect/.test(url) && /magic_link_requested/.test(url + ((init && init.body) || ''))) sent();
           } catch (e) {}
-          var p = f.apply(this, arguments);
-          try {
-            if (!window[OFF] && method === 'POST' && /\/auth\/v1\/otp(\?|$)/.test(url)) {
-              p.then(function (r) {
-                if (!r || !r.ok || window[OFF]) return;
-                gtag('event', 'magic_link_requested', { method: 'magic_link', page_location: loc, event_callback: off, event_timeout: 2000 });
-                setTimeout(off, 2500);
-              }, function () {});
-            }
-          } catch (e) {}
-          return p;
+          var otp = method === 'POST' && /\/auth\/v1\/otp(\?|$)/.test(url);
+          if (!otp || window[OFF]) return f.apply(this, arguments);
+          /* Sign-in form submitted. Queue magic_link_requested, make GA send its queue now (GA sends
+             queued hits on pagehide), wait until that hit has gone out (at most 1 s), then switch GA
+             off for the rest of the page and only then make the request. So nothing goes to GA once
+             the "check your email" screen (which shows the address) appears. */
+          var self = this, args = arguments;
+          return new Promise(function (done) {
+            var go = function () { if (go) { go = null; sent = null; off(); done(); } };
+            sent = function () { setTimeout(function () { go && go(); }, 50); };
+            gtag('event', 'magic_link_requested', { method: 'magic_link', page_location: loc });
+            setTimeout(function () { try { window.dispatchEvent(new Event('pagehide')); } catch (e) {} }, 0);
+            setTimeout(function () { go && go(); }, 1000);
+          }).then(function () { return f.apply(self, args); });
         };
       })();
     </script>
@@ -92,8 +103,10 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="22-Day" />
     <title>22-Day 7-Minute Workout</title>
+    <script src="/assets/privacy-1aa163f4.js"></script>
     <script type="module" crossorigin src="/assets/index-733fa79e.js"></script>
     <link rel="stylesheet" crossorigin href="/assets/index-6953f694.css">
+    <link rel="stylesheet" href="/assets/privacy-5a7f049a.css">
     <script defer src="/assets/reminders-dc1cd6b2.js"></script>
   <link rel="manifest" href="/manifest.webmanifest"><script id="vite-plugin-pwa:register-sw" src="/registerSW.js"></script></head>
   <body>
