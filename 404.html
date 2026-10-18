@@ -2,6 +2,80 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!-- Google Analytics, public signed-out views only (landing and sign-in form before submit).
+         Never loads on signed-in app screens, on any path other than /, or on a sign-in return URL
+         (code, access_token, token_hash and similar in the query or hash). No automatic page_view;
+         one manual page_view with the query and hash stripped. Never sends email, a hashed email,
+         user_id or any workout, check-in or health data. -->
+    <script>
+      (function () {
+        var ID = 'G-WKF5HQXHB1', OFF = 'ga-disable-' + ID;
+        function publicPath() { var p = location.pathname; return p === '/' || p === '/index.html'; }
+        function authInUrl() {
+          var q = location.search.replace(/^\?/, '') + '&' + location.hash.replace(/^#/, '');
+          return /(^|[&?#\/])(code|access_token|refresh_token|provider_token|token_hash|token|type|error|error_code|error_description)=/i.test(q);
+        }
+        function signedIn() {
+          try {
+            for (var i = 0; i < localStorage.length; i++) {
+              var k = localStorage.key(i);
+              if (((/^sb-.*-auth-token/.test(k) && !/code-verifier$/.test(k)) || k === 'actm.review.email') && localStorage.getItem(k)) return true;
+            }
+            return false;
+          } catch (e) { return true; }
+        }
+        function allowed() { return publicPath() && !authInUrl() && !signedIn(); }
+        function off() { window[OFF] = true; }
+        if (!allowed()) { off(); return; }
+
+        window.dataLayer = window.dataLayer || [];
+        window.gtag = function () { dataLayer.push(arguments); };
+        var s = document.createElement('script');
+        s.async = true;
+        s.src = 'https://www.googletagmanager.com/gtag/js?id=' + ID;
+        document.head.appendChild(s);
+        var loc = location.origin + location.pathname, ref = '';
+        try { if (document.referrer) { var r = new URL(document.referrer); ref = r.origin + r.pathname; } } catch (e) {}
+        gtag('js', new Date());
+        gtag('config', ID, { send_page_view: false, page_location: loc, page_referrer: ref, allow_google_signals: false, allow_ad_personalization_signals: false });
+        gtag('event', 'page_view', { page_location: loc, page_referrer: ref, page_title: document.title });
+
+        /* Switch GA off for good as soon as the view stops being public. */
+        function check() { if (!window[OFF] && !allowed()) off(); }
+        ['pushState', 'replaceState'].forEach(function (m) {
+          var o = history[m];
+          history[m] = function () { var x = o.apply(this, arguments); check(); return x; };
+        });
+        addEventListener('popstate', check);
+        addEventListener('hashchange', check);
+        addEventListener('storage', check);
+        var t = setInterval(function () { check(); if (window[OFF]) clearInterval(t); }, 500);
+
+        /* magic_link_requested: the sign-in link request (POST /auth/v1/otp) succeeded. Sent once,
+           then GA is switched off. Any other auth or data call also switches GA off. */
+        var f = window.fetch;
+        if (typeof f !== 'function') return;
+        window.fetch = function (input, init) {
+          var url = '', method = 'GET';
+          try {
+            url = typeof input === 'string' ? input : (input && input.url) || String(input || '');
+            method = ((init && init.method) || (input && input.method) || 'GET').toUpperCase();
+            if (/\/auth\/v1\/(token|verify|user|logout|callback)/.test(url) || /\/rest\/v1\//.test(url)) off();
+          } catch (e) {}
+          var p = f.apply(this, arguments);
+          try {
+            if (!window[OFF] && method === 'POST' && /\/auth\/v1\/otp(\?|$)/.test(url)) {
+              p.then(function (r) {
+                if (!r || !r.ok || window[OFF]) return;
+                gtag('event', 'magic_link_requested', { method: 'magic_link', page_location: loc, event_callback: off, event_timeout: 2000 });
+                setTimeout(off, 2500);
+              }, function () {});
+            }
+          } catch (e) {}
+          return p;
+        };
+      })();
+    </script>
     <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32-v5.png" />
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon-v5.png" />
