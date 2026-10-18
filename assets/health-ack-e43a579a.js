@@ -74,7 +74,7 @@
         var blocks = card.querySelectorAll(".hs-ack-lang");
         [].forEach.call(blocks, function (b) { b.hidden = !b.hidden; });
         var cur = current(); card.setAttribute("aria-labelledby", cur.querySelector("h2").id);
-        wrap.scrollTop = 0; cur.querySelector('[data-hs="lang"]').focus();
+        var ch = cur.querySelector("h2"); ch.setAttribute("tabindex", "-1"); ch.focus({ preventScroll: true }); wrap.scrollTop = 0;
       } else if (k === "go" && !w.disabled) {
         try { localStorage.setItem(KEY, JSON.stringify({ version: VERSION, lang: current().getAttribute("lang"), at: new Date().toISOString() })); } catch (err) {}
         others.forEach(function (el) { el.removeAttribute("inert"); el.removeAttribute("aria-hidden"); });
@@ -91,7 +91,10 @@
       if (e.shiftKey && i <= 0) { e.preventDefault(); f[f.length - 1].focus(); }
       else if (!e.shiftKey && i === f.length - 1) { e.preventDefault(); f[0].focus(); }
     });
-    current().querySelector('[data-hs="tick"]').focus();
+    // Start at the top: focus the heading (not the tick box, which would scroll past the text).
+    var h2 = current().querySelector("h2"); h2.setAttribute("tabindex", "-1");
+    try { h2.focus({ preventScroll: true }); } catch (err) { h2.focus(); }
+    wrap.scrollTop = 0;
   }
   if (document.body) show(); else document.addEventListener("DOMContentLoaded", show);
 })();
