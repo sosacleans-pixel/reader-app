@@ -21,6 +21,28 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Move" />
     <title>A Challenge to Move</title>
+    <script>
+      /* GA4 sign_up (method 'magic_link'): fires when the Supabase magic-link email request succeeds
+         (POST /auth/v1/otp returns 2xx). Wraps fetch before the app bundle loads, so the Supabase client
+         picks up the wrapper. Sends no email or other personal data. */
+      (function () {
+        var f = window.fetch;
+        if (typeof f !== 'function') return;
+        window.fetch = function (input, init) {
+          var p = f.apply(window, arguments);
+          try {
+            var url = typeof input === 'string' ? input : (input && input.url) || '';
+            var method = ((init && init.method) || (input && input.method) || 'GET').toUpperCase();
+            if (method === 'POST' && /\/auth\/v1\/otp(\?|$)/.test(url)) {
+              p.then(function (r) {
+                if (r && r.ok && typeof window.gtag === 'function') window.gtag('event', 'sign_up', { method: 'magic_link' });
+              }, function () {});
+            }
+          } catch (e) {}
+          return p;
+        };
+      })();
+    </script>
     <script type="module" crossorigin src="/assets/index-a6a37664.js"></script>
     <link rel="stylesheet" crossorigin href="/assets/index-6953f694.css">
     <script defer src="/assets/reminders-dc1cd6b2.js"></script>
