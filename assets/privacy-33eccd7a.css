@@ -44,3 +44,12 @@
 .pr-policy{position:fixed;inset:0;z-index:2147483000;background:#fff;display:flex;flex-direction:column}
 .pr-policy-close{padding:.8rem 1rem;font-weight:700;color:#1e1e1e;background:#ffc700;text-decoration:none}
 .pr-policy-frame{flex:1;border:0;width:100%}
+/* consent screen on app open */
+.pr-gate{position:fixed;inset:0;z-index:10050;background:rgba(30,30,30,.82);display:flex;align-items:flex-end;justify-content:center;font-family:var(--font-lato,Lato,system-ui,sans-serif)}
+.pr-gate-card{width:100%;max-width:30rem;max-height:100dvh;overflow-y:auto;background:#fffdf8;color:#1e1e1e;border-top:4px solid #ffc700;border-radius:1.5rem 1.5rem 0 0;padding:1.25rem 1.1rem calc(1.25rem + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:.8rem;box-sizing:border-box}
+@media (min-width:640px){.pr-gate{align-items:center}.pr-gate-card{border-radius:1.5rem;max-height:calc(100dvh - 2rem)}}
+.pr-gate-h{font-family:var(--font-anton,Anton,Impact,sans-serif);font-weight:400;font-size:2rem;line-height:1.05;letter-spacing:.02em;text-transform:uppercase;margin:0}
+.pr-consent-gate{margin-top:0}
+.pr-warn{color:#bf3404;font-weight:700}
+.pr-btn-dark{background:#1e1e1e;border-color:#1e1e1e;color:#ffc700}
+.pr-msg:empty{display:none}

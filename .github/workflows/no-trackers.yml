@@ -1,8 +1,21 @@
 name: no-trackers
+# Fails if any deployed file references Google Analytics / Tag Manager / Google Fonts,
+# or if an HTML page loads a resource from any origin other than the app and its Supabase project.
 on: [push, pull_request]
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: bash scripts/check-no-trackers.sh
+      - name: No trackers or Google Fonts in deployed files
+        run: |
+          set -euo pipefail
+          P='gtag|googletagmanager|google-analytics|fonts\.googleapis|fonts\.gstatic'
+          if grep -rIlE --exclude-dir=.git --exclude-dir=.github "$P" .; then
+            echo "FAIL: tracker / Google Fonts reference found (files above)"; exit 1
+          fi
+          bad=$(grep -rhoiE --exclude-dir=.git --include='*.html' '<(script|link|img|iframe)[^>]+(src|href)="https?://[^"]+' . \
+            | grep -viE 'https://(app\.coachsalimheyaime\.com|olncfwohfpgpmygxjpcm\.supabase\.co)' \
+            | grep -viE '<link[^>]+rel="canonical"' || true)
+          if [ -n "$bad" ]; then echo "FAIL: HTML loads a third-party resource:"; echo "$bad"; exit 1; fi
+          echo "OK"

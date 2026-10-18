@@ -1,6 +1,8 @@
-/* Coach Salim Heyaime LLC · 22-Day app: privacy rights add-on (unminified on purpose).
+/* Coach Salim Heyaime LLC · 22-Day 7-Minute Workout: privacy rights add-on (unminified on purpose).
    Hooks into the built bundle from the outside, the same way reminders-*.js does:
    - consent gate before saving a day (Terms required; check-ins only with separate CHD consent)
+   - consent screen on app open for any signed-in user with no consent record (existing users);
+     leaving the check-in box unticked records "declined" and nulls their past check-ins under their own session
    - strips energy/mood/reflection from day_logs writes when CHD consent is not given
    - "Your account": Download my data, Withdraw consent, Delete my account and data
    - reflections hint, policy links
@@ -14,8 +16,11 @@
   var EMAIL = "coachsalimheyaime@gmail.com";
   var BUSINESS = "Coach Salim Heyaime LLC";
 
-  var CHD_VERSION = "chd-2026-10-18-draft";
-  var TERMS_VERSION = "terms-2026-10-18-draft";
+  var APP_NAME = "22-Day 7-Minute Workout";
+  // Bump these whenever the policy text changes; the version is stored with every consent record.
+  var CHD_VERSION = "chd-2026-10-18.2-draft";
+  var TERMS_VERSION = "terms-2026-10-18.2-draft";
+  var LATER_KEY = "actm.consent.later"; // sessionStorage: "Decide later" hides the consent screen for this visit only
   var CHD_TEXT = "I consent to Coach Salim Heyaime LLC collecting and storing my energy, mood, and reflections to run my 22-day program";
   var TERMS_TEXT = "I am 18 or older and agree to the Terms of Use, including the Assumption of Risk and the Release of Liability, which covers claims based on Coach Salim Heyaime LLC\u2019s negligence.";
   var HINT = "Private notes about how today\u2019s movement went. Please don\u2019t enter medical details (diagnoses, medications, test results) or other people\u2019s information.";
@@ -186,10 +191,28 @@
       return JSON.stringify(d);
     } catch (e) { return body; }
   }
+  // Check-in values the server already holds, by calendar date (read from the app's own day_logs reads).
+  // While a user hasn't decided yet, the device copy may keep these, but nothing new.
+  var serverChd = {};
+  function rememberServerRows(text) {
+    try {
+      var rows = JSON.parse(text);
+      if (!Array.isArray(rows)) return;
+      rows.forEach(function (r) {
+        if (r && r.calendar_date) serverChd[r.calendar_date] = { energyBefore: r.energy_before, energyAfter: r.energy_after, mood: r.mood, reflection: r.reflection || "" };
+      });
+    } catch (e) {}
+  }
   window.fetch = function (input, init) {
     try {
       var url = typeof input === "string" ? input : (input && input.url) || "";
       var method = String((init && init.method) || (input && input.method) || "GET").toUpperCase();
+      if (url.indexOf(SB + "/rest/v1/day_logs") === 0 && method === "GET") {
+        return nativeFetch(input, init).then(function (r) {
+          if (!r.ok) return r;
+          return r.clone().text().then(function (t) { rememberServerRows(t); return r; }, function () { return r; });
+        });
+      }
       if (url.indexOf(SB + "/rest/v1/day_logs") === 0 && /^(POST|PATCH|PUT)$/.test(method) && init && typeof init.body === "string") {
         return ready().then(function () {
           if (!chdGranted()) init = Object.assign({}, init, { body: stripBody(init.body) });
@@ -199,19 +222,23 @@
     } catch (e) {}
     return nativeFetch(input, init);
   };
-  function stripLocalLogs(raw) {
+  // keepServer: undecided users keep what the server already has (until they decline or the 30 days run out),
+  // but nothing new. Declined / withdrawn: everything goes.
+  function stripLocalLogs(raw, keepServer) {
     try {
       var list = JSON.parse(raw);
       if (!Array.isArray(list)) return raw;
       return JSON.stringify(list.map(function (l) {
-        l.energyBefore = null; l.energyAfter = null; l.mood = null; l.reflection = "";
+        var srv = keepServer && serverChd[l.calendarDate];
+        l.energyBefore = srv ? srv.energyBefore : null; l.energyAfter = srv ? srv.energyAfter : null;
+        l.mood = srv ? srv.mood : null; l.reflection = srv ? srv.reflection : "";
         return l;
       }));
     } catch (e) { return raw; }
   }
   Storage.prototype.setItem = function (k, v) {
     if (this === window.localStorage && /^actm\.logs\./.test(String(k)) && state.known && state.uid && !chdGranted()) {
-      v = stripLocalLogs(String(v));
+      v = stripLocalLogs(String(v), !state.chd);
     }
     return nativeSetItem.call(this, k, v);
   };
@@ -224,6 +251,7 @@
   /* Block the save buttons (capture phase, before React sees the click) until Terms are accepted. */
   window.addEventListener("click", function (e) {
     var b = e.target && e.target.closest && e.target.closest("button");
+    if (b && b.closest('[data-pr="gate"]')) return;
     if (!b || !SAVE_LABELS.test(b.textContent.trim())) return;
     if (session() && !termsGranted()) {
       e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
@@ -269,6 +297,7 @@
     var where = state.server === "ok" ? "saved on our server" : state.server === "missing" ? "saved on this device only (server record not set up yet)" : "saved on this device; will sync to the server";
     var parts = [];
     if (chdGranted()) parts.push("Check-ins: consent given " + fmt(state.chd.server_created_at || state.chd.created_at));
+    else if (state.chd && state.chd.action === "declined") parts.push("Check-ins: declined " + fmt(state.chd.server_created_at || state.chd.created_at));
     else if (state.chd) parts.push("Check-ins: consent withdrawn " + fmt(state.chd.server_created_at || state.chd.created_at));
     else parts.push("Check-ins: off (no consent given)");
     if (termsGranted()) parts.push("Terms accepted " + fmt(state.terms.server_created_at || state.terms.created_at));
@@ -294,6 +323,104 @@
 
   function msg(flow, cls, text) { flow.innerHTML = ""; var p = el("p", { class: "pr-msg " + (cls || ""), text: text }); flow.appendChild(p); return p; }
 
+  /* Null energy/mood/reflection in every day_logs row of the signed-in user (RLS limits it to their own rows). */
+  function nullServerCheckins() {
+    var s = session();
+    if (!s) return Promise.reject(new Error("Not signed in"));
+    var body = JSON.stringify({ energy_before: null, energy_after: null, mood: null, reflection: null });
+    return rest("day_logs?user_id=eq." + encodeURIComponent(s.user.id), { method: "PATCH", headers: { Prefer: "return=minimal" }, body: body });
+  }
+
+  /* ---------------- consent screen on app open (no consent record yet) ---------------- */
+  function hadLocalCheckins() {
+    var s = session();
+    var logs = s ? lsGet("actm.logs." + s.user.id) : null;
+    return Array.isArray(logs) && logs.length > 0;
+  }
+  function needsGate() {
+    if (!session() || !state.known || state.chd || state.terms) return false;
+    if (/^\/(privacy|consumer-health-data|terms|unsubscribe)\//.test(initialPath.replace(/\/?$/, "/"))) return false;
+    try { if (sessionStorage.getItem(LATER_KEY)) return false; } catch (e) {}
+    return true;
+  }
+  var GATE_TEXT = {
+    existing: { h: "We\u2019ve updated our privacy policies", lead: "Please make two choices before your next check-in. Read the ",
+      warn: "If you leave the check-in box unticked, the energy, mood and reflections you saved before are deleted when you continue. If you don\u2019t choose within 30 days of our email notice, we delete them then. Your kept days stay either way." },
+    fresh: { h: "Before you start", lead: "Two choices before you keep your first day. Read the ",
+      warn: "Without the check-in box you can still keep your days. Energy, mood and reflection stay off." }
+  };
+  function syncGate(gate) {
+    var t = GATE_TEXT[hadLocalCheckins() ? "existing" : "fresh"];
+    gate.querySelector(".pr-gate-h").textContent = t.h;
+    gate.querySelector(".pr-gate-lead").firstChild.textContent = t.lead;
+    gate.querySelector(".pr-warn").textContent = t.warn;
+  }
+  function buildGate() {
+    var existing = hadLocalCheckins();
+    var terms = el("input", { type: "checkbox", id: "pr-gate-terms" });
+    var chd = el("input", { type: "checkbox", id: "pr-gate-chd" });
+    var go = el("button", { type: "button", class: "pr-btn pr-btn-dark", "data-a": "gate-continue", disabled: "disabled", text: "Continue" });
+    var later = el("button", { type: "button", class: "pr-btn pr-btn-ghost", "data-a": "gate-later", text: "Decide later" });
+    var note = el("p", { class: "pr-msg", "aria-live": "polite" });
+    var warn = el("p", { class: "pr-small pr-warn", text: existing
+      ? "If you leave the check-in box unticked, the energy, mood and reflections you saved before are deleted when you continue. If you don\u2019t choose within 30 days of our email notice, we delete them then. Your kept days stay either way."
+      : "Without the check-in box you can still keep your days. Energy, mood and reflection stay off." });
+    terms.addEventListener("change", function () { go.disabled = !terms.checked; });
+    var gate = el("div", { class: "pr-gate", role: "dialog", "aria-modal": "true", "aria-labelledby": "pr-gate-h", "data-pr": "gate" }, [
+      el("div", { class: "pr-gate-card" }, [
+        el("p", { class: "pr-eyebrow", text: APP_NAME }),
+        el("h2", { class: "pr-gate-h", id: "pr-gate-h", text: existing ? "We\u2019ve updated our privacy policies" : "Before you start" }),
+        el("p", { class: "pr-small pr-gate-lead" }, [
+          existing ? "Please make two choices before your next check-in. Read the " : "Two choices before you keep your first day. Read the ",
+          policyLink("privacy", "Privacy Policy"), ", the ", policyLink("chd", "Consumer Health Data Privacy Policy"), " and the ", policyLink("terms", "Terms of Use"), "."
+        ]),
+        el("div", { class: "pr-consent pr-consent-gate" }, [
+          el("div", { class: "pr-row" }, [
+            el("label", { class: "pr-check", for: "pr-gate-terms" }, [terms, el("span", { text: TERMS_TEXT })]),
+            el("p", { class: "pr-small", text: "Required to keep days." })
+          ]),
+          el("div", { class: "pr-row" }, [
+            el("label", { class: "pr-check", for: "pr-gate-chd" }, [chd, el("span", { text: CHD_TEXT })]),
+            el("p", { class: "pr-small" }, [
+              "Optional. Stored with your account on Supabase\u2019s servers, only to show them back to you here. Never sold or used for advertising. Withdraw or delete them any time in Your account. ",
+              policyLink("chd", "Consumer Health Data Privacy Policy")
+            ]),
+            warn
+          ])
+        ]),
+        note,
+        el("div", { class: "pr-actions" }, [go, later])
+      ])
+    ]);
+    later.addEventListener("click", function () {
+      try { sessionStorage.setItem(LATER_KEY, "1"); } catch (e) {}
+      gate.remove();
+    });
+    gate.addEventListener("keydown", function (e) { if (e.key === "Escape") later.click(); });
+    go.addEventListener("click", function () {
+      if (!terms.checked) return;
+      go.disabled = true; later.disabled = true; go.textContent = "Saving\u2026";
+      var granted = chd.checked;
+      var jobs = [record("terms", "granted"), record("chd", granted ? "granted" : "declined")];
+      if (!granted) {
+        scrubLocalLogsNow();
+        jobs.push(nullServerCheckins().then(function (r) { return r.ok; }).catch(function () { return false; }));
+      }
+      Promise.all(jobs).then(function (res) {
+        if (!granted && res[2] === false) {
+          note.className = "pr-msg pr-err";
+          note.textContent = "Your choices are saved. We couldn\u2019t reach the server to delete your earlier check-ins just now; they\u2019ll be deleted automatically within a day.";
+          go.textContent = "Close"; go.disabled = false;
+          go.onclick = function () { gate.remove(); };
+          return;
+        }
+        gate.remove();
+        refresh();
+      });
+    });
+    return gate;
+  }
+
   function withdrawFlow(flow) {
     var was = chdGranted();
     var done = was ? record("chd", "withdrawn") : Promise.resolve();
@@ -308,10 +435,7 @@
     var del = el("button", { type: "button", class: "pr-btn pr-btn-danger", text: "Delete my account and data instead" });
     yes.addEventListener("click", function () {
       yes.disabled = true; yes.textContent = "Deleting check-ins\u2026";
-      done.then(function () {
-        var body = JSON.stringify({ energy_before: null, energy_after: null, mood: null, reflection: null });
-        return rest("day_logs?user_id=eq." + encodeURIComponent(state.uid), { method: "PATCH", headers: { Prefer: "return=minimal" }, body: body });
-      }).then(function (r) {
+      done.then(nullServerCheckins).then(function (r) {
         msg(flow, r.ok ? "" : "pr-err", r.ok ? "Your saved check-ins are deleted. Your kept days stay on the calendar." : "We couldn\u2019t reach the server, so your saved check-ins weren\u2019t deleted. Try again, or email " + EMAIL + ".");
       }).catch(function () { msg(flow, "pr-err", "We couldn\u2019t reach the server, so your saved check-ins weren\u2019t deleted. Try again, or email " + EMAIL + "."); });
     });
@@ -397,7 +521,7 @@
       export_format: "22-day-app-export/1",
       exported_at: new Date().toISOString(),
       provider: BUSINESS,
-      app: "22-Day 7-Minute Workout (app.coachsalimheyaime.com)",
+      app: APP_NAME + " (app.coachsalimheyaime.com)",
       account: { user_id: uid, email: s.user.email || null, created_at: s.user.created_at || null },
       errors: {}
     };
@@ -437,6 +561,13 @@
     var s = session();
     var uid = s ? s.user.id : null;
     if (uid !== lastUid) { lastUid = uid; state.loading = null; state.known = false; if (uid) loadConsent(); }
+
+    // Consent screen for signed-in users with no consent record (existing users on their next open)
+    var gate = document.querySelector('[data-pr="gate"]');
+    if (needsGate()) {
+      if (!gate) { gate = buildGate(); document.body.appendChild(gate); var f = gate.querySelector("input"); if (f) f.focus(); }
+      syncGate(gate);
+    } else if (gate && !gate.contains(document.activeElement) && (state.chd || state.terms || !session())) gate.remove();
 
     // Account dialog
     document.querySelectorAll('[role="dialog"]').forEach(function (d) {
