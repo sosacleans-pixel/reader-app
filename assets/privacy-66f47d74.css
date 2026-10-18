@@ -1,0 +1,46 @@
+/* Coach Salim Heyaime LLC · 22-Day app: privacy rights add-on styles (unminified). Uses the app's own fonts. */
+.pr-panel{margin-top:1.25rem;padding-top:1.25rem;border-top:1px solid #e6dcc0;display:flex;flex-direction:column;gap:.6rem;font-family:var(--font-lato,Lato,system-ui,sans-serif)}
+.pr-panel[hidden],.pr-consent[hidden],.pr-row[hidden],.pr-eyebrow[hidden],.pr-legal[hidden]{display:none!important}
+.pr-h{font-family:var(--font-anton,Anton,Impact,sans-serif);font-size:1.5rem;line-height:1;letter-spacing:.03em;text-transform:uppercase;color:#1e1e1e;margin:0}
+.pr-status{font-size:.8rem;line-height:1.45;color:#5e584c;margin:0}
+.pr-btn{display:inline-flex;width:100%;align-items:center;justify-content:center;min-height:44px;padding:.65rem 1rem;border-radius:999px;font-weight:700;font-size:.95rem;cursor:pointer;border:2px solid #1e1e1e;background:transparent;color:#1e1e1e;touch-action:manipulation}
+.pr-btn:disabled{opacity:.45;cursor:not-allowed}
+.pr-btn-danger{background:#bf3404;border-color:#bf3404;color:#fff}
+.pr-btn-ghost{border-color:transparent}
+.pr-btn:focus-visible,.pr-input:focus-visible,.pr-check input:focus-visible{outline:3px solid #ffc700;outline-offset:2px}
+.pr-small{font-size:.8rem;line-height:1.45;color:#5e584c;margin:0}
+.pr-small a,.pr-links a,.pr-legal a{color:#1e1e1e;font-weight:700;text-decoration:underline;text-underline-offset:3px}
+.pr-links{font-size:.8rem;line-height:1.6;margin:.25rem 0 0;text-align:center}
+.pr-flow:empty{display:none}
+.pr-flow{display:flex;flex-direction:column;gap:.6rem;border-radius:1rem;background:#fff7e8;padding:.9rem}
+.pr-actions{display:flex;flex-direction:column;gap:.5rem}
+.pr-confirm{display:flex;flex-direction:column;gap:.5rem}
+.pr-q{font-weight:700;margin:0;color:#1e1e1e}
+.pr-msg{margin:0;font-size:.9rem;line-height:1.45;color:#1e1e1e}
+.pr-err{color:#bf3404;font-weight:700}
+.pr-ok{font-weight:700}
+.pr-label{font-size:.75rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#5e584c}
+.pr-input{width:100%;min-height:44px;border:2px solid #e6dcc0;border-radius:1rem;background:#fff;padding:.5rem .9rem;font-size:1rem;letter-spacing:.1em;color:#1e1e1e}
+/* consent card */
+.pr-consent{margin-top:1rem;border:2px solid #ffc700;border-radius:1.25rem;background:#fffdf8;padding:1rem;display:flex;flex-direction:column;gap:.9rem;color:#1e1e1e;text-align:left}
+.pr-eyebrow{margin:0;font-size:.7rem;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:#bf3404}
+.pr-row{display:flex;flex-direction:column;gap:.4rem}
+.pr-check{display:flex;gap:.7rem;align-items:flex-start;font-size:.95rem;line-height:1.4;font-weight:700;cursor:pointer}
+.pr-check input{flex:none;width:1.4rem;height:1.4rem;margin-top:.05rem;accent-color:#1e1e1e;cursor:pointer}
+.pr-need{display:none;margin:0;font-size:.8rem;font-weight:700;color:#bf3404}
+.pr-shake .pr-row-terms .pr-need{display:block}
+.pr-shake{animation:pr-shake .4s}
+@keyframes pr-shake{25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+@media (prefers-reduced-motion:reduce){.pr-shake{animation:none}}
+.pr-blocked{opacity:.5;cursor:not-allowed}
+/* check-in inputs hidden until consent */
+.pr-chd-off{display:none!important}
+/* reflections hint */
+.pr-hint{margin:.5rem 0 0;font-size:.8rem;line-height:1.45;color:#5e584c}
+/* legal footer outside #root */
+.pr-legal{max-width:42rem;margin:0 auto;padding:1.25rem 1rem calc(1.5rem + env(safe-area-inset-bottom));text-align:center;font-size:.8rem;line-height:1.7;color:#5e584c;background:#fff7e8;font-family:var(--font-lato,Lato,system-ui,sans-serif)}
+.pr-legal p{margin:.25rem 0 0}
+/* policy fallback overlay (only when an old service worker serves the app shell for a policy URL) */
+.pr-policy{position:fixed;inset:0;z-index:2147483000;background:#fff;display:flex;flex-direction:column}
+.pr-policy-close{padding:.8rem 1rem;font-weight:700;color:#1e1e1e;background:#ffc700;text-decoration:none}
+.pr-policy-frame{flex:1;border:0;width:100%}
