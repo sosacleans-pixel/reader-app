@@ -3,6 +3,7 @@
    - consent gate before saving a day (Terms required; check-ins only with separate CHD consent)
    - consent screen on app open for any signed-in user with no consent record (existing users);
      leaving the check-in box unticked records "declined" and nulls their past check-ins under their own session
+     (after a confirm step when they have saved energy, mood or reflections)
    - strips energy/mood/reflection from day_logs writes when CHD consent is not given
    - "Your account": Download my data, Withdraw consent, Delete my account and data
    - reflections hint, policy links
@@ -22,7 +23,11 @@
   var TERMS_VERSION = "terms-2026-10-18.2-draft";
   var LATER_KEY = "actm.consent.later"; // sessionStorage: "Decide later" hides the consent screen for this visit only
   var CHD_TEXT = "I consent to Coach Salim Heyaime LLC collecting and storing my energy, mood, and reflections to run my 22-day program";
-  var TERMS_TEXT = "I am 18 or older and agree to the Terms of Use, including the Assumption of Risk and the Release of Liability, which covers claims based on Coach Salim Heyaime LLC\u2019s negligence.";
+  // The release must be conspicuous: the negligence clause is shown (and recorded) in bold caps, as in the holiday app.
+  var TERMS_LEAD = "I am 18 or older and agree to the Terms of Use, including the Assumption of Risk and the Release of Liability, ";
+  var TERMS_RELEASE = "WHICH COVERS CLAIMS BASED ON THE NEGLIGENCE OF COACH SALIM HEYAIME LLC";
+  var TERMS_TEXT = TERMS_LEAD + TERMS_RELEASE + ".";
+  var DECLINE_CONFIRM_TEXT = "This will delete your saved energy, mood and reflections. Continue?";
   var HINT = "Private notes about how today\u2019s movement went. Please don\u2019t enter medical details (diagnoses, medications, test results) or other people\u2019s information.";
   var DELETE_EMAIL_TEXT = "You can also email " + EMAIL + " to request deletion; we complete requests within 45 days.";
   var POLICY = { privacy: "/privacy/", chd: "/consumer-health-data/", terms: "/terms/" };
@@ -66,6 +71,7 @@
     (kids || []).forEach(function (c) { if (c) n.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
     return n;
   }
+  function termsLabel() { return el("span", { class: "pr-terms-label" }, [TERMS_LEAD, el("strong", { class: "pr-release", text: TERMS_RELEASE }), "."]); }
   function policyLink(key, label) { return el("a", { href: POLICY[key], target: "_blank", rel: "noopener", text: label }); }
   function fmt(iso) {
     try { return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(iso)); } catch (e) { return iso; }
@@ -269,7 +275,7 @@
     return el("div", { class: "pr-consent", "data-pr": "card" }, [
       el("p", { class: "pr-eyebrow", text: "Before you keep a day" }),
       el("div", { class: "pr-row pr-row-terms" }, [
-        el("label", { class: "pr-check", for: "pr-terms" }, [terms, el("span", { text: TERMS_TEXT })]),
+        el("label", { class: "pr-check", for: "pr-terms" }, [terms, termsLabel()]),
         el("p", { class: "pr-small" }, ["Required to keep days. Read the ", policyLink("terms", "Terms of Use"), "."]),
         el("p", { class: "pr-need", role: "alert", text: "Tick this box to keep today." })
       ]),
@@ -337,6 +343,15 @@
     var logs = s ? lsGet("actm.logs." + s.user.id) : null;
     return Array.isArray(logs) && logs.length > 0;
   }
+  // Energy, mood or reflections the user has saved (device copy or what the server returned).
+  function hasValue(v) { return v !== null && v !== undefined && String(v).trim() !== ""; }
+  function hasSavedCheckins() {
+    var s = session();
+    var logs = s ? lsGet("actm.logs." + s.user.id) : null;
+    var local = Array.isArray(logs) && logs.some(function (l) { return l && (hasValue(l.energyBefore) || hasValue(l.energyAfter) || hasValue(l.mood) || hasValue(l.reflection)); });
+    var server = Object.keys(serverChd).some(function (d) { var r = serverChd[d]; return hasValue(r.energyBefore) || hasValue(r.energyAfter) || hasValue(r.mood) || hasValue(r.reflection); });
+    return local || server;
+  }
   function needsGate() {
     if (!session() || !state.known || state.chd || state.terms) return false;
     if (/^\/(privacy|consumer-health-data|terms|unsubscribe)\//.test(initialPath.replace(/\/?$/, "/"))) return false;
@@ -376,7 +391,7 @@
         ]),
         el("div", { class: "pr-consent pr-consent-gate" }, [
           el("div", { class: "pr-row" }, [
-            el("label", { class: "pr-check", for: "pr-gate-terms" }, [terms, el("span", { text: TERMS_TEXT })]),
+            el("label", { class: "pr-check", for: "pr-gate-terms" }, [terms, termsLabel()]),
             el("p", { class: "pr-small", text: "Required to keep days." })
           ]),
           el("div", { class: "pr-row" }, [
@@ -397,8 +412,42 @@
       gate.remove();
     });
     gate.addEventListener("keydown", function (e) { if (e.key === "Escape") later.click(); });
+    var card = gate.querySelector(".pr-gate-card");
+    // Declining check-ins with saved check-ins asks first; nothing is recorded or nulled until confirmed.
+    function confirmDecline() {
+      var q = el("p", { class: "pr-q", id: "pr-decline-q", text: DECLINE_CONFIRM_TEXT });
+      var yes = el("button", { type: "button", class: "pr-btn pr-btn-danger", "data-a": "decline-confirm", text: "Yes, delete and continue" });
+      var back = el("button", { type: "button", class: "pr-btn pr-btn-outline", "data-a": "decline-cancel", text: "Go back" });
+      var box = el("div", { class: "pr-confirm-card", role: "alertdialog", "aria-modal": "true", "aria-labelledby": "pr-decline-q" }, [q, el("div", { class: "pr-actions" }, [yes, back])]);
+      var layer = el("div", { class: "pr-confirm-layer", "data-pr": "decline-confirm" }, [box]);
+      function close() {
+        layer.remove();
+        card.removeAttribute("inert"); card.removeAttribute("aria-hidden");
+      }
+      back.addEventListener("click", function () { close(); go.focus(); });
+      yes.addEventListener("click", function () { close(); submit(); });
+      layer.addEventListener("keydown", function (e) {
+        if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); back.click(); return; }
+        if (e.key === "Tab") { // keep focus inside the two buttons
+          var first = yes, last = back;
+          if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+          else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+          else if (document.activeElement !== first && document.activeElement !== last) { e.preventDefault(); first.focus(); }
+        }
+      });
+      card.setAttribute("inert", ""); card.setAttribute("aria-hidden", "true");
+      gate.appendChild(layer);
+      back.focus(); // the safe choice has focus first
+    }
+    var submitted = false;
     go.addEventListener("click", function () {
-      if (!terms.checked) return;
+      if (!terms.checked || submitted) return;
+      if (!chd.checked && hasSavedCheckins()) { confirmDecline(); return; }
+      submit();
+    });
+    function submit() {
+      if (!terms.checked || submitted) return;
+      submitted = true;
       go.disabled = true; later.disabled = true; go.textContent = "Saving\u2026";
       var granted = chd.checked;
       var jobs = [record("terms", "granted"), record("chd", granted ? "granted" : "declined")];
@@ -417,7 +466,7 @@
         gate.remove();
         refresh();
       });
-    });
+    }
     return gate;
   }
 
