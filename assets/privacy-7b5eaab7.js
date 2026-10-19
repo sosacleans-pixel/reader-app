@@ -9,6 +9,9 @@
    - reflections hint, policy links
    - sign-in: "I'm 18 or older." box next to the email field; the sign-in link is not requested until it is ticked
    - check-in consent wording: Attorney gaps-and-fixes M-1 (separate from Terms, never pre-ticked, Continue works either way)
+   - Terms: accepted once on the shared Health, safety and App Terms screen (health-ack-*.js, actm.healthAck.22-day).
+     The "Before you start" screen asks only the optional check-ins question (EN/ES, language of the shared screen)
+     and records no separate Terms of Use consent.
    Talks only to app.coachsalimheyaime.com and the project's Supabase URL. No trackers. */
 (function () {
   "use strict";
@@ -30,6 +33,18 @@
   var CHD_BODY = "If you agree, Coach Salim Heyaime LLC will store your energy ratings (before and after), your mood rating and your written reflections with your account, so you can see them on any device. These are consumer health data: they can reveal your physical or mental state, and anything you choose to write, including health details. We use them only to show them back to you. They are stored by Supabase, our database provider, in " + CHD_REGION + ". They are never sold, never used for advertising, and never shared with anyone else unless you give separate consent. You can do the workouts without this. You can withdraw at any time in Account > Your data and privacy, and delete what you saved. Read the ";
   var CHD_TEXT = "I agree that Coach Salim Heyaime LLC may collect and store my check-ins as described above.";
   var CHD_RECORD = CHD_TITLE + " " + CHD_BODY + "Consumer Health Data Privacy Policy. " + CHD_TEXT; // stored with every consent event
+  // ES draft wording: gaps-and-fixes M-1 (ES), region filled in. Needs a native-speaker read before publishing.
+  var CHD_ES = {
+    title: "\u00bfGuardar tus registros diarios? (opcional)",
+    body: "Si aceptas, Coach Salim Heyaime LLC guardar\u00e1 con tu cuenta tus niveles de energ\u00eda (antes y despu\u00e9s), tu estado de \u00e1nimo y tus reflexiones escritas, para que puedas verlos en cualquier dispositivo. Estos son datos de salud del consumidor: pueden revelar tu estado f\u00edsico o mental, y cualquier cosa que decidas escribir, incluidos detalles de salud. Solo los usamos para mostr\u00e1rtelos a ti. Los almacena Supabase, nuestro proveedor de base de datos, en Estados Unidos. Nunca se venden, no se usan para publicidad y no se comparten con nadie m\u00e1s, salvo que des un consentimiento aparte. Puedes hacer los entrenamientos sin esto. Puedes retirar tu consentimiento cuando quieras en Cuenta > Tus datos y privacidad, y borrar lo que guardaste. Lee la ",
+    link: "Pol\u00edtica de privacidad de datos de salud del consumidor",
+    text: "Acepto que Coach Salim Heyaime LLC recopile y guarde mis registros diarios como se describe arriba."
+  };
+  var CHD_RECORD_ES = CHD_ES.title + " " + CHD_ES.body + CHD_ES.link + ". " + CHD_ES.text;
+  // The shared Health, safety and App Terms consent (assets/health-ack-*.js). Its record covers the App Terms,
+  // so this add-on never asks for (or records) a separate Terms of Use consent once it is in place.
+  var SHARED_ACK_KEY = "actm.healthAck.22-day";
+  var SHARED_ACK_VERSION = "hs-2026-10-18.4"; // fallback only; the live value comes from window.ACTM_HEALTH_ACK.version
   var AGE_LABEL = "I\u2019m 18 or older.";
   var AGE_NOTE = "This app is for adults 18 and older.";
   var AGE_NEED = "Please confirm you\u2019re 18 or older to get a sign-in link.";
@@ -104,7 +119,17 @@
     return list[0] || null;
   }
   function chdGranted() { return !!(state.chd && state.chd.action === "granted"); }
-  function termsGranted() { return !!(state.terms && state.terms.action === "granted"); }
+  function sharedAck() {
+    try { var a = window.ACTM_HEALTH_ACK; return (a && typeof a.record === "function" ? a.record() : lsGet(SHARED_ACK_KEY)) || null; } catch (e) { return null; }
+  }
+  function sharedAckDone() {
+    var r = sharedAck(), a = window.ACTM_HEALTH_ACK;
+    return !!(r && r.version && r.version === ((a && a.version) || SHARED_ACK_VERSION));
+  }
+  // Language of the shared consent screen (the person picks it there); English until they choose.
+  function uiLang() { var r = sharedAck(); return r && r.lang === "es" ? "es" : "en"; }
+  // Terms are accepted on the shared consent screen; an older separate Terms record still counts.
+  function termsGranted() { return sharedAckDone() || !!(state.terms && state.terms.action === "granted"); }
 
   function applyEvents(events) {
     state.chd = latest(events, "chd");
@@ -172,7 +197,7 @@
       });
   }
 
-  function record(kind, action) {
+  function record(kind, action, lang) {
     var s = session();
     if (!s) return Promise.resolve();
     state.uid = s.user.id;
@@ -180,7 +205,7 @@
       id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
       kind: kind, action: action,
       version: kind === "chd" ? CHD_VERSION : TERMS_VERSION,
-      consent_text: kind === "chd" ? CHD_RECORD : TERMS_TEXT,
+      consent_text: kind === "chd" ? (lang === "es" ? CHD_RECORD_ES : CHD_RECORD) : TERMS_TEXT,
       created_at: new Date().toISOString(), synced: false
     };
     var local = readLocal(state.uid);
@@ -316,7 +341,8 @@
     else if (state.chd && state.chd.action === "declined") parts.push("Check-ins: declined " + fmt(state.chd.server_created_at || state.chd.created_at));
     else if (state.chd) parts.push("Check-ins: consent withdrawn " + fmt(state.chd.server_created_at || state.chd.created_at));
     else parts.push("Check-ins: off (no consent given)");
-    if (termsGranted()) parts.push("Terms accepted " + fmt(state.terms.server_created_at || state.terms.created_at));
+    if (sharedAckDone()) { var sa = sharedAck(); parts.push("Health, safety and App Terms accepted" + (sa.at && !isNaN(Date.parse(sa.at)) ? " " + fmt(sa.at) : "") + " (" + sa.version + ")"); }
+    else if (termsGranted()) parts.push("Terms accepted " + fmt(state.terms.server_created_at || state.terms.created_at));
     return parts.join(". ") + (state.chd || state.terms ? " (" + where + ")." : ".");
   }
 
@@ -368,46 +394,61 @@
     try { if (sessionStorage.getItem(LATER_KEY)) return false; } catch (e) {}
     return true;
   }
+  // "Before you start" / existing-user screen: one optional choice (check-ins). Terms were accepted on the shared screen.
   var GATE_TEXT = {
-    existing: { h: "We\u2019ve updated our privacy policies", lead: "Please make two choices before your next check-in. Read the ",
-      warn: "If you leave the check-in box unticked, the energy, mood and reflections you saved before are deleted when you continue. If you don\u2019t choose within 30 days of our email notice, we delete them then. Your kept days stay either way." },
-    fresh: { h: "Before you start", lead: "Two choices before you keep your first day. Read the ",
-      warn: "Without the check-in box you can still keep your days. Energy, mood and reflection stay off." }
+    en: {
+      existing: { h: "We\u2019ve updated our privacy policies", lead: "One choice before your next check-in. Read the ",
+        warn: "If you leave the check-in box unticked, the energy, mood and reflections you saved before are deleted when you continue. If you don\u2019t choose within 30 days of our email notice, we delete them then. Your kept days stay either way." },
+      fresh: { h: "Before you start", lead: "One choice before you keep your first day. Read the ",
+        warn: "Without the check-in box you can still keep your days. Energy, mood and reflection stay off." },
+      privacy: "Privacy Policy", and: " and the ", chdLink: "Consumer Health Data Privacy Policy",
+      chdTitle: CHD_TITLE, chdBody: CHD_BODY, chdText: CHD_TEXT,
+      go: "Continue", later: "Decide later", saving: "Saving\u2026", close: "Close",
+      confirm: DECLINE_CONFIRM_TEXT, yes: "Yes, delete and continue", back: "Go back",
+      err: "Your choices are saved. We couldn\u2019t reach the server to delete your earlier check-ins just now; they\u2019ll be deleted automatically within a day."
+    },
+    es: {
+      existing: { h: "Actualizamos nuestras pol\u00edticas de privacidad", lead: "Una decisi\u00f3n antes de tu pr\u00f3ximo registro diario. Lee la ",
+        warn: "Si dejas sin marcar la casilla de registros diarios, la energ\u00eda, el estado de \u00e1nimo y las reflexiones que guardaste antes se borran al continuar. Si no eliges dentro de los 30 d\u00edas posteriores a nuestro aviso por correo, los borramos entonces. Tus d\u00edas guardados se conservan de todos modos." },
+      fresh: { h: "Antes de empezar", lead: "Una decisi\u00f3n antes de guardar tu primer d\u00eda. Lee la ",
+        warn: "Sin la casilla de registros diarios igual puedes guardar tus d\u00edas. La energ\u00eda, el estado de \u00e1nimo y la reflexi\u00f3n quedan desactivados." },
+      privacy: "Pol\u00edtica de privacidad", and: " y la ", chdLink: CHD_ES.link,
+      chdTitle: CHD_ES.title, chdBody: CHD_ES.body, chdText: CHD_ES.text,
+      go: "Continuar", later: "Decidir despu\u00e9s", saving: "Guardando\u2026", close: "Cerrar",
+      confirm: "Esto borrar\u00e1 la energ\u00eda, el estado de \u00e1nimo y las reflexiones que guardaste. \u00bfContinuar?", yes: "S\u00ed, borrar y continuar", back: "Volver",
+      err: "Tus decisiones est\u00e1n guardadas. No pudimos conectar con el servidor para borrar tus registros diarios anteriores; se borrar\u00e1n autom\u00e1ticamente en un d\u00eda."
+    }
   };
   function syncGate(gate) {
-    var t = GATE_TEXT[hadLocalCheckins() ? "existing" : "fresh"];
+    var L = GATE_TEXT[gate.getAttribute("data-lang")] || GATE_TEXT.en;
+    var t = L[hadLocalCheckins() ? "existing" : "fresh"];
     gate.querySelector(".pr-gate-h").textContent = t.h;
     gate.querySelector(".pr-gate-lead").firstChild.textContent = t.lead;
     gate.querySelector(".pr-warn").textContent = t.warn;
   }
-  function buildGate() {
-    var existing = hadLocalCheckins();
-    var terms = el("input", { type: "checkbox", id: "pr-gate-terms" });
+  function buildGate(lang, chdTicked) {
+    lang = GATE_TEXT[lang] ? lang : "en";
+    var L = GATE_TEXT[lang];
+    var t = L[hadLocalCheckins() ? "existing" : "fresh"];
     var chd = el("input", { type: "checkbox", id: "pr-gate-chd" });
-    var go = el("button", { type: "button", class: "pr-btn pr-btn-dark", "data-a": "gate-continue", disabled: "disabled", text: "Continue" });
-    var later = el("button", { type: "button", class: "pr-btn pr-btn-ghost", "data-a": "gate-later", text: "Decide later" });
+    if (chdTicked) chd.checked = true;
+    // Continue works with the check-ins box ticked or not (nothing else to tick on this screen).
+    var go = el("button", { type: "button", class: "pr-btn pr-btn-dark", "data-a": "gate-continue", text: L.go });
+    var later = el("button", { type: "button", class: "pr-btn pr-btn-ghost", "data-a": "gate-later", text: L.later });
     var note = el("p", { class: "pr-msg", "aria-live": "polite" });
-    var warn = el("p", { class: "pr-small pr-warn", text: existing
-      ? "If you leave the check-in box unticked, the energy, mood and reflections you saved before are deleted when you continue. If you don\u2019t choose within 30 days of our email notice, we delete them then. Your kept days stay either way."
-      : "Without the check-in box you can still keep your days. Energy, mood and reflection stay off." });
-    terms.addEventListener("change", function () { go.disabled = !terms.checked; });
-    var gate = el("div", { class: "pr-gate", role: "dialog", "aria-modal": "true", "aria-labelledby": "pr-gate-h", "data-pr": "gate" }, [
+    var warn = el("p", { class: "pr-small pr-warn", text: t.warn });
+    var gate = el("div", { class: "pr-gate", role: "dialog", "aria-modal": "true", "aria-labelledby": "pr-gate-h", "data-pr": "gate", "data-lang": lang, lang: lang }, [
       el("div", { class: "pr-gate-card" }, [
         el("p", { class: "pr-eyebrow", text: APP_NAME }),
-        el("h2", { class: "pr-gate-h", id: "pr-gate-h", text: existing ? "We\u2019ve updated our privacy policies" : "Before you start" }),
+        el("h2", { class: "pr-gate-h", id: "pr-gate-h", tabindex: "-1", text: t.h }),
         el("p", { class: "pr-small pr-gate-lead" }, [
-          existing ? "Please make two choices before your next check-in. Read the " : "Two choices before you keep your first day. Read the ",
-          policyLink("privacy", "Privacy Policy"), ", the ", policyLink("chd", "Consumer Health Data Privacy Policy"), " and the ", policyLink("terms", "Terms of Use"), "."
+          t.lead, policyLink("privacy", L.privacy), L.and, policyLink("chd", L.chdLink), "."
         ]),
         el("div", { class: "pr-consent pr-consent-gate" }, [
-          el("div", { class: "pr-row" }, [
-            el("label", { class: "pr-check", for: "pr-gate-terms" }, [terms, termsLabel()]),
-            el("p", { class: "pr-small", text: "Required to keep days." })
-          ]),
-          el("div", { class: "pr-row" }, [
-            el("p", { class: "pr-chd-title", text: CHD_TITLE }),
-            el("p", { class: "pr-small" }, [CHD_BODY, policyLink("chd", "Consumer Health Data Privacy Policy"), "."]),
-            el("label", { class: "pr-check", for: "pr-gate-chd" }, [chd, el("span", { text: CHD_TEXT })]),
+          el("div", { class: "pr-row pr-row-chd" }, [
+            el("p", { class: "pr-chd-title", text: L.chdTitle }),
+            el("p", { class: "pr-small" }, [L.chdBody, policyLink("chd", L.chdLink), "."]),
+            el("label", { class: "pr-check", for: "pr-gate-chd" }, [chd, el("span", { text: L.chdText })]),
             warn
           ])
         ]),
@@ -423,9 +464,9 @@
     var card = gate.querySelector(".pr-gate-card");
     // Declining check-ins with saved check-ins asks first; nothing is recorded or nulled until confirmed.
     function confirmDecline() {
-      var q = el("p", { class: "pr-q", id: "pr-decline-q", text: DECLINE_CONFIRM_TEXT });
-      var yes = el("button", { type: "button", class: "pr-btn pr-btn-danger", "data-a": "decline-confirm", text: "Yes, delete and continue" });
-      var back = el("button", { type: "button", class: "pr-btn pr-btn-outline", "data-a": "decline-cancel", text: "Go back" });
+      var q = el("p", { class: "pr-q", id: "pr-decline-q", text: L.confirm });
+      var yes = el("button", { type: "button", class: "pr-btn pr-btn-danger", "data-a": "decline-confirm", text: L.yes });
+      var back = el("button", { type: "button", class: "pr-btn pr-btn-outline", "data-a": "decline-cancel", text: L.back });
       var box = el("div", { class: "pr-confirm-card", role: "alertdialog", "aria-modal": "true", "aria-labelledby": "pr-decline-q" }, [q, el("div", { class: "pr-actions" }, [yes, back])]);
       var layer = el("div", { class: "pr-confirm-layer", "data-pr": "decline-confirm" }, [box]);
       function close() {
@@ -449,25 +490,26 @@
     }
     var submitted = false;
     go.addEventListener("click", function () {
-      if (!terms.checked || submitted) return;
+      if (submitted) return;
       if (!chd.checked && hasSavedCheckins()) { confirmDecline(); return; }
       submit();
     });
     function submit() {
-      if (!terms.checked || submitted) return;
-      submitted = true;
-      go.disabled = true; later.disabled = true; go.textContent = "Saving\u2026";
+      if (submitted) return;
+      submitted = true; gate._submitted = true;
+      go.disabled = true; later.disabled = true; go.textContent = L.saving;
       var granted = chd.checked;
-      var jobs = [record("terms", "granted"), record("chd", granted ? "granted" : "declined")];
+      // Only the check-ins choice is recorded here. Terms: the shared consent record (actm.healthAck.22-day).
+      var jobs = [record("chd", granted ? "granted" : "declined", lang)];
       if (!granted) {
         scrubLocalLogsNow();
         jobs.push(nullServerCheckins().then(function (r) { return r.ok; }).catch(function () { return false; }));
       }
       Promise.all(jobs).then(function (res) {
-        if (!granted && res[2] === false) {
+        if (!granted && res[1] === false) {
           note.className = "pr-msg pr-err";
-          note.textContent = "Your choices are saved. We couldn\u2019t reach the server to delete your earlier check-ins just now; they\u2019ll be deleted automatically within a day.";
-          go.textContent = "Close"; go.disabled = false;
+          note.textContent = L.err;
+          go.textContent = L.close; go.disabled = false;
           go.onclick = function () { gate.remove(); };
           return;
         }
@@ -656,7 +698,13 @@
     // Consent screen for signed-in users with no consent record (existing users on their next open)
     var gate = document.querySelector('[data-pr="gate"]');
     if (needsGate()) {
-      if (!gate) { gate = buildGate(); document.body.appendChild(gate); var f = gate.querySelector("input"); if (f) f.focus(); }
+      // Built in the language picked on the shared consent screen; rebuilt once if that choice arrives later.
+      var lg = uiLang();
+      if (gate && gate.getAttribute("data-lang") !== lg && !gate._submitted && !gate.querySelector('[data-pr="decline-confirm"]')) {
+        var keep = !!(gate.querySelector("#pr-gate-chd") || {}).checked; gate.remove(); gate = buildGate(lg, keep); document.body.appendChild(gate);
+        try { gate.querySelector("#pr-gate-h").focus({ preventScroll: true }); } catch (e) {}
+      }
+      if (!gate) { gate = buildGate(lg); document.body.appendChild(gate); try { gate.querySelector("#pr-gate-h").focus({ preventScroll: true }); } catch (e) {} }
       syncGate(gate);
     } else if (gate && !gate.contains(document.activeElement) && (state.chd || state.terms || !session())) gate.remove();
 
@@ -726,6 +774,7 @@
     new MutationObserver(schedule).observe(document.body, { childList: true, subtree: true });
     window.addEventListener("storage", schedule);
     window.addEventListener("popstate", schedule);
+    document.addEventListener("actm:health-ack", schedule); // shared consent saved: Terms covered, language known
     policyFallback();
     refresh();
   }
