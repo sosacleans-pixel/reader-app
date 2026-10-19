@@ -7,6 +7,8 @@
    - strips energy/mood/reflection from day_logs writes when CHD consent is not given
    - "Your account": Download my data, Withdraw consent, Delete my account and data
    - reflections hint, policy links
+   - sign-in: "I'm 18 or older." box next to the email field; the sign-in link is not requested until it is ticked
+   - check-in consent wording: Attorney gaps-and-fixes M-1 (separate from Terms, never pre-ticked, Continue works either way)
    Talks only to app.coachsalimheyaime.com and the project's Supabase URL. No trackers. */
 (function () {
   "use strict";
@@ -19,10 +21,18 @@
 
   var APP_NAME = "22-Day 7-Minute Workout";
   // Bump these whenever the policy text changes; the version is stored with every consent record.
-  var CHD_VERSION = "chd-2026-10-18.2-draft";
+  var CHD_VERSION = "chd-2026-10-18.3-draft";
   var TERMS_VERSION = "terms-2026-10-18.2-draft";
   var LATER_KEY = "actm.consent.later"; // sessionStorage: "Decide later" hides the consent screen for this visit only
-  var CHD_TEXT = "I consent to Coach Salim Heyaime LLC collecting and storing my energy, mood, and reflections to run my 22-day program";
+  // Attorney M-1 (EN). Supabase region: CONFIRM in Supabase Settings > Infrastructure before shipping (M-13).
+  var CHD_REGION = "the United States";
+  var CHD_TITLE = "Save your check-ins? (optional)";
+  var CHD_BODY = "If you agree, Coach Salim Heyaime LLC will store your energy ratings (before and after), your mood rating and your written reflections with your account, so you can see them on any device. These are consumer health data: they can reveal your physical or mental state, and anything you choose to write, including health details. We use them only to show them back to you. They are stored by Supabase, our database provider, in " + CHD_REGION + ". They are never sold, never used for advertising, and never shared with anyone else unless you give separate consent. You can do the workouts without this. You can withdraw at any time in Account > Your data and privacy, and delete what you saved. Read the ";
+  var CHD_TEXT = "I agree that Coach Salim Heyaime LLC may collect and store my check-ins as described above.";
+  var CHD_RECORD = CHD_TITLE + " " + CHD_BODY + "Consumer Health Data Privacy Policy. " + CHD_TEXT; // stored with every consent event
+  var AGE_LABEL = "I\u2019m 18 or older.";
+  var AGE_NOTE = "This app is for adults 18 and older.";
+  var AGE_NEED = "Please confirm you\u2019re 18 or older to get a sign-in link.";
   // The release must be conspicuous: the negligence clause is shown (and recorded) in bold caps, as in the holiday app.
   var TERMS_LEAD = "I am 18 or older and agree to the Terms of Use, including the Assumption of Risk and the Release of Liability, ";
   var TERMS_RELEASE = "WHICH COVERS CLAIMS BASED ON THE NEGLIGENCE OF COACH SALIM HEYAIME LLC";
@@ -170,7 +180,7 @@
       id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
       kind: kind, action: action,
       version: kind === "chd" ? CHD_VERSION : TERMS_VERSION,
-      consent_text: kind === "chd" ? CHD_TEXT : TERMS_TEXT,
+      consent_text: kind === "chd" ? CHD_RECORD : TERMS_TEXT,
       created_at: new Date().toISOString(), synced: false
     };
     var local = readLocal(state.uid);
@@ -187,7 +197,9 @@
      2) The local log cache (actm.logs.<uid>) drops them too, so nothing unsent lingers on the device. */
   function stripRow(row) {
     if (!row || typeof row !== "object") return row;
-    CHD_FIELDS.forEach(function (f) { if (f in row) row[f] = null; });
+    // Drop the keys instead of writing null: a write without consent never touches what is already stored.
+    // (Deleting saved check-ins happens only when the user declines or withdraws and confirms, via nullServerCheckins.)
+    CHD_FIELDS.forEach(function (f) { if (f in row) delete row[f]; });
     return row;
   }
   function stripBody(body) {
@@ -280,11 +292,9 @@
         el("p", { class: "pr-need", role: "alert", text: "Tick this box to keep today." })
       ]),
       el("div", { class: "pr-row pr-row-chd" }, [
+        el("p", { class: "pr-chd-title", text: CHD_TITLE }),
+        el("p", { class: "pr-small" }, [CHD_BODY, policyLink("chd", "Consumer Health Data Privacy Policy"), "."]),
         el("label", { class: "pr-check", for: "pr-chd" }, [chd, el("span", { text: CHD_TEXT })]),
-        el("p", { class: "pr-small" }, [
-          "Optional. Your energy and mood ratings and reflections are stored with your account on Supabase\u2019s servers, only to show them back to you here. Never sold or used for advertising. Withdraw or delete them any time in Your account. ",
-          policyLink("chd", "Consumer Health Data Privacy Policy")
-        ]),
         el("p", { class: "pr-small pr-off", text: "Without this box ticked you can still keep the day. Energy, mood and reflection stay off and are saved blank." })
       ])
     ]);
@@ -395,11 +405,9 @@
             el("p", { class: "pr-small", text: "Required to keep days." })
           ]),
           el("div", { class: "pr-row" }, [
+            el("p", { class: "pr-chd-title", text: CHD_TITLE }),
+            el("p", { class: "pr-small" }, [CHD_BODY, policyLink("chd", "Consumer Health Data Privacy Policy"), "."]),
             el("label", { class: "pr-check", for: "pr-gate-chd" }, [chd, el("span", { text: CHD_TEXT })]),
-            el("p", { class: "pr-small" }, [
-              "Optional. Stored with your account on Supabase\u2019s servers, only to show them back to you here. Never sold or used for advertising. Withdraw or delete them any time in Your account. ",
-              policyLink("chd", "Consumer Health Data Privacy Policy")
-            ]),
             warn
           ])
         ]),
@@ -595,6 +603,40 @@
     });
   }
 
+  /* ---------------- 18+ at sign-in (Attorney M-11) ----------------
+     A neutral affirmation next to the email field, never pre-ticked. No birth date is asked. Until it is ticked,
+     the sign-in form does not submit (capture phase, before React sees the submit). */
+  function ageBox(form) {
+    var input = el("input", { type: "checkbox", id: "pr-age", "data-pr": "age-input" });
+    var need = el("p", { class: "pr-need pr-age-need", role: "alert", text: AGE_NEED });
+    var wrap = el("div", { class: "pr-age", "data-pr": "age" }, [
+      el("label", { class: "pr-check", for: "pr-age" }, [input, el("span", { text: AGE_LABEL })]),
+      el("p", { class: "pr-small", text: AGE_NOTE }),
+      need
+    ]);
+    input.addEventListener("change", function () { wrap.classList.toggle("pr-age-missing", false); });
+    return wrap;
+  }
+  function wireAge() {
+    var email = document.getElementById("email");
+    if (!email || email.type !== "email") return;
+    var form = email.closest("form");
+    if (!form || form.querySelector('[data-pr="age"]')) return;
+    var submit = form.querySelector('button[type="submit"]');
+    var box = ageBox(form);
+    if (submit) submit.insertAdjacentElement("beforebegin", box); else form.appendChild(box);
+  }
+  window.addEventListener("submit", function (e) {
+    var f = e.target;
+    if (!f || !f.querySelector || !f.querySelector("#email")) return;
+    var age = f.querySelector("#pr-age");
+    if (age && !age.checked) {
+      e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+      var w = f.querySelector('[data-pr="age"]'); if (w) w.classList.add("pr-age-missing");
+      age.focus();
+    }
+  }, true);
+
   /* ---------------- DOM wiring ---------------- */
   function legalNav() {
     return el("nav", { class: "pr-legal", "aria-label": "Legal", "data-pr": "legal" }, [
@@ -651,6 +693,8 @@
       b.classList.toggle("pr-blocked", blocked);
       if (blocked) b.setAttribute("aria-disabled", "true"); else b.removeAttribute("aria-disabled");
     });
+
+    wireAge();
 
     // Legal links under the app (login and home screens; hidden on the full-screen timer)
     var nav = document.querySelector('[data-pr="legal"]');
