@@ -58,3 +58,7 @@
 /* confirm before declining check-ins deletes saved ones */
 .pr-confirm-layer{position:fixed;inset:0;z-index:1;background:rgba(30,30,30,.6);display:flex;align-items:center;justify-content:center;padding:1rem;box-sizing:border-box}
 .pr-confirm-card{width:100%;max-width:24rem;background:#fffdf8;color:#1e1e1e;border-top:4px solid #bf3404;border-radius:1.25rem;padding:1.25rem 1.1rem;display:flex;flex-direction:column;gap:.9rem;box-sizing:border-box;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+/* 18+ at sign-in; check-in consent title (Attorney M-1, M-11) */
+.pr-age{margin:.25rem 0 .5rem}
+.pr-age-missing .pr-need{display:block}
+.pr-chd-title{margin:0 0 .25rem;font-weight:700}
