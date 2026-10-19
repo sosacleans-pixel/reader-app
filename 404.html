@@ -35,7 +35,7 @@
         }
         function consent() { try { return localStorage.getItem(KEY); } catch (e) { return 'denied'; } }
         function allowed() { return publicPath() && !authInUrl() && !signedIn() && !privacySignal(); }
-        function off() { window[OFF] = true; var b = document.getElementById('actm-consent'); if (b) b.remove(); }
+        function off() { window[OFF] = true; var b = document.getElementById('actm-consent'); if (b) { b.remove(); document.body.style.paddingBottom = ''; } }
         if (!allowed()) { off(); return; }
 
         var started = false, loc = location.origin + location.pathname, ref = '';
@@ -67,6 +67,8 @@
         /* Consent banner (Attorney's EN wording, M-3). Equal-weight buttons, nothing pre-selected.
            "Cookie settings" is added to the legal links under the sign-in screen and reopens it. */
         var T = { title: 'Analytics cookies?', body: 'With your OK, we use Google Analytics to count visits and see which pages and buttons are used. This can show which fitness programs you looked at, which some state laws treat as health data. Google processes it for us as a service provider; we never send your name, email or anything you enter in an app. Analytics stays off unless you choose Accept, and you can change your choice any time in Cookie settings.', yes: 'Accept analytics', no: 'No thanks', settings: 'Cookie settings' };
+        /* Keep page content reachable above the banner: pad the page bottom while it is open. */
+        function pad() { var b = document.getElementById('actm-consent'); document.body.style.paddingBottom = b ? (b.offsetHeight + 24) + 'px' : ''; }
         function mk(tag, attrs, text) { var n = document.createElement(tag); for (var k in attrs) n.setAttribute(k, attrs[k]); if (text) n.textContent = text; return n; }
         function banner(focus) {
           if (window[OFF]) return;
@@ -76,14 +78,15 @@
           b.appendChild(mk('p', { class: 'cb-body' }, T.body));
           var row = mk('div', { class: 'cb-actions' });
           var y = mk('button', { type: 'button', 'data-consent': 'accept' }, T.yes), n = mk('button', { type: 'button', 'data-consent': 'decline' }, T.no);
-          y.onclick = function () { try { localStorage.setItem(KEY, 'granted'); } catch (e) {} b.remove(); start(); };
-          n.onclick = function () { try { localStorage.setItem(KEY, 'denied'); } catch (e) {} b.remove(); if (started) window[OFF] = true; };
+          y.onclick = function () { try { localStorage.setItem(KEY, 'granted'); } catch (e) {} b.remove(); pad(); start(); };
+          n.onclick = function () { try { localStorage.setItem(KEY, 'denied'); } catch (e) {} b.remove(); pad(); if (started) window[OFF] = true; };
           row.appendChild(y); row.appendChild(n); b.appendChild(row);
           var l = mk('p', { class: 'cb-links' });
           l.appendChild(mk('a', { href: '/privacy/' }, 'Privacy')); l.appendChild(document.createTextNode(' \u00b7 '));
           l.appendChild(mk('a', { href: '/consumer-health-data/' }, 'Consumer Health Data Privacy Policy'));
           b.appendChild(l);
           document.body.appendChild(b);
+          pad();
           if (focus) y.focus();
         }
         function settingsLink() {
