@@ -10,7 +10,7 @@
   var KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9sbmNmd29oZnBncG15Z3hqcGNtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE3MzQ0ODgsImV4cCI6MjEwNzMxMDQ4OH0.rcjQ4E2oPVyth1bboHvwRFqUtwAAAkmUw1TGwF20_Uc";
   var STORE = "sb-olncfwohfpgpmygxjpcm-auth-token";
   var OK_KEY = "actm.bookgate.ok.";
-  var WHERE = "page 10";                                   // where the code is printed (confirm with Book Publisher)
+  var WHERE = "page 73";                                   // where the code is printed (confirm with Book Publisher)
   var BUY = "https://www.amazon.com/dp/B0HN22P5F4";
   var SITE = "https://book.coachsalimheyaime.com/";
   var HELP = "coachsalimheyaime@gmail.com";
